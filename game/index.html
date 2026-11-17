@@ -1,19 +1,135 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Block Dodger</title>
+<title>Neon Shores — an open-world crime game</title>
+<link rel="icon" href="data:,">
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.min.js" } }
+</script>
 <style>
-  html, body { margin: 0; height: 100%; overflow: hidden; background: #11141b; }
-  #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
-  /* Read aloud, never shown: the status line screen readers announce. */
-  #status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  :root { --gold: #f5b942; --panel: rgba(12, 14, 22, 0.72); --line: rgba(255,255,255,0.14); }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #1a140f;
+    font-family: "Segoe UI", system-ui, -apple-system, Arial, sans-serif; color: #f2ede4; }
+  #game { position: fixed; inset: 0; }
+  #game canvas { display: block; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 8px 12px; backdrop-filter: blur(4px); }
+  /* top-left: money + wanted */
+  #hud-left { position: fixed; top: 14px; left: 14px; z-index: 5; }
+  #hud-money { font-size: 30px; font-weight: 800; color: #7ee787; line-height: 1; }
+  #hud-wanted { margin-top: 4px; font-size: 22px; letter-spacing: 2px; }
+  #hud-wanted .star { color: rgba(255,255,255,0.25); }
+  #hud-wanted .star.on { color: #ff3b30; text-shadow: 0 0 8px rgba(255,59,48,0.8); }
+  /* top-right: clock, objective, minimap */
+  #hud-right { position: fixed; top: 14px; right: 14px; z-index: 5; text-align: right; }
+  #hud-clock { font-size: 24px; font-weight: 700; }
+  #hud-objective { margin-top: 4px; font-size: 14px; color: #ffd27a; }
+  #hud-objective-dist { font-size: 13px; color: #cfc8b8; }
+  #minimap { margin-top: 8px; width: 180px; height: 180px; border-radius: 10px;
+    border: 1px solid var(--line); background: #0c1420; }
+  /* bottom-left: health + ammo */
+  #hud-bottom-left { position: fixed; left: 14px; bottom: 14px; z-index: 5; }
+  #hud-health { width: 210px; height: 12px; background: rgba(255,255,255,0.15);
+    border-radius: 6px; overflow: hidden; }
+  #hud-health-fill { height: 100%; width: 100%; background: #3fce62; border-radius: 6px; }
+  #hud-health-text { font-size: 12px; color: #cfc8b8; margin-top: 3px; }
+  #hud-ammo { margin-top: 6px; font-size: 17px; font-weight: 700; }
+  /* bottom-right: speed */
+  #hud-speed { position: fixed; right: 16px; bottom: 14px; z-index: 5;
+    font-size: 30px; font-weight: 800; text-shadow: 0 2px 6px rgba(0,0,0,0.6); }
+  /* crosshair */
+  #crosshair { position: fixed; left: 50%; top: 50%; width: 10px; height: 10px; z-index: 5;
+    margin: -5px 0 0 -5px; border: 2px solid rgba(255,255,255,0.85); border-radius: 50%;
+    box-shadow: 0 0 4px rgba(0,0,0,0.8); pointer-events: none; }
+  /* toast */
+  #toast { position: fixed; left: 50%; bottom: 86px; transform: translateX(-50%); z-index: 6;
+    font-size: 16px; font-weight: 700; color: #ffd27a; text-shadow: 0 2px 6px rgba(0,0,0,0.8);
+    opacity: 0; transition: opacity 0.3s; pointer-events: none; white-space: nowrap; }
+  /* bottom-centre objective bar */
+  #hud-objective-bar { position: fixed; left: 50%; bottom: 150px; transform: translateX(-50%);
+    z-index: 5; font-size: 15px; font-weight: 600; color: #f2ede4; white-space: nowrap;
+    max-width: 92vw; overflow: hidden; text-overflow: ellipsis; }
+  /* overlays */
+  .overlay { position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; text-align: center;
+    background: linear-gradient(180deg, rgba(20,10,4,0.82), rgba(10,8,18,0.88)); }
+  .overlay.hidden { display: none; }
+  .overlay h1 { font-size: 64px; letter-spacing: 6px; color: var(--gold);
+    text-shadow: 0 0 24px rgba(245,185,66,0.45); }
+  .overlay h2 { font-size: 20px; font-weight: 400; color: #e8ddc8; margin-top: 8px; }
+  .overlay p { max-width: 560px; margin-top: 18px; line-height: 1.6; color: #cfc8b8; font-size: 15px; }
+  .overlay .cta { margin-top: 26px; font-size: 18px; font-weight: 700; color: #0c0e16;
+    background: var(--gold); padding: 12px 28px; border-radius: 999px; }
+  .overlay .keys { margin-top: 22px; font-size: 13px; color: #9a938a; line-height: 1.9; }
+  #mission-title { font-size: 40px; }
+  #mission-reward { font-size: 26px; color: #7ee787; margin-top: 10px; font-weight: 800; }
 </style>
 </head>
 <body>
-<canvas id="game" aria-label="Block Dodger: move the paddle left and right to dodge falling blocks and catch coins"></canvas>
-<p id="status" role="status" aria-live="polite"></p>
+<div id="game"></div>
+
+<div id="hud-left" class="panel">
+  <div id="hud-money">$0</div>
+  <div id="hud-wanted"><span class="star">★</span><span class="star">★</span><span class="star">★</span><span class="star">★</span><span class="star">★</span></div>
+</div>
+
+<div id="hud-right" class="panel">
+  <div id="hud-clock">17:45</div>
+  <div id="hud-objective">First Wheels</div>
+  <div id="hud-objective-dist">Steal a car</div>
+  <canvas id="minimap" width="180" height="180"></canvas>
+</div>
+
+<div id="hud-bottom-left" class="panel">
+  <div id="hud-health"><div id="hud-health-fill"></div></div>
+  <div id="hud-health-text">HEALTH 100</div>
+  <div id="hud-ammo">Pistol 12 / ∞</div>
+</div>
+
+<div id="hud-speed">0 km/h</div>
+<div id="crosshair"></div>
+<div id="hud-objective-bar" class="panel"></div>
+<div id="toast"></div>
+
+<div id="overlay-start" class="overlay">
+  <h1>NEON SHORES</h1>
+  <h2>Solmar after dark. Take the city, one job at a time.</h2>
+  <p>You are Rico Vega, fresh out and broke. Steal cars, dodge the Solmar PD,
+     and run five jobs across downtown, the boardwalk, and the docks.</p>
+  <div class="cta">CLICK TO START</div>
+  <div class="keys">
+    WASD move &nbsp;·&nbsp; SHIFT run &nbsp;·&nbsp; E steal / exit car &nbsp;·&nbsp; Mouse aim &amp; shoot<br>
+    F punch &nbsp;·&nbsp; R reload &nbsp;·&nbsp; ESC pause &nbsp;·&nbsp; M mute
+  </div>
+</div>
+
+<div id="overlay-pause" class="overlay hidden">
+  <h1 style="font-size:44px">PAUSED</h1>
+  <p>Press ESC to keep playing.</p>
+</div>
+
+<div id="overlay-mission" class="overlay hidden">
+  <h1 id="mission-title">JOB DONE</h1>
+  <div id="mission-reward">+$250</div>
+  <p id="mission-next">Next job unlocked.</p>
+  <div class="cta">CONTINUE</div>
+</div>
+
+<div id="overlay-busted" class="overlay hidden">
+  <h1 style="font-size:44px">BUSTED</h1>
+  <p id="busted-text">The Solmar PD took you in.</p>
+  <div class="cta">BACK ON THE STREET</div>
+</div>
+
+<div id="overlay-wasted" class="overlay hidden">
+  <h1 style="font-size:44px">WASTED</h1>
+  <p id="wasted-text">You got wasted.</p>
+  <div class="cta">BACK ON THE STREET</div>
+</div>
+
 <script type="module" src="./src/main.js"></script>
 </body>
 </html>

@@ -1,10 +1,21 @@
-# neon-shores
+# Neon Shores
 
 [![make.fun · gta6-01](https://make.fun/badge/gta6-01.svg)](https://make.fun/bounty/gta6-01?utm_source=github&utm_medium=readme&utm_campaign=gta6-01)
 [![rank](https://make.fun/badge/gta6-01/Bonser386/neon-shores/rank.svg)](https://make.fun/bounty/gta6-01/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=gta6-01)
 [![reward](https://make.fun/badge/gta6-01/Bonser386/neon-shores/reward.svg)](https://make.fun/bounty/gta6-01?utm_source=github&utm_medium=readme&utm_campaign=gta6-01)
 
-Neon Shores — an open-world crime game in the spirit of GTA 6, played in the browser: a sun-soaked coastal city to explore on foot and by car, traffic and pedestrians, cars to steal and drive, a wanted level with police who respond, and missions with a story.
+**Neon Shores** is an open-world crime game in the spirit of GTA 6, played in a desktop browser. You are Rico Vega, broke and fresh out, in Solmar — a coastal city of downtown towers, a palm-lined beach boardwalk, a container port and quiet suburbs, all under a golden-hour sky. Steal cars, run jobs, and stay ahead of the Solmar PD.
+
+## What is in the game
+
+- **A city to explore on foot and by car** — an 8×8 road grid with traffic that follows the streets, pedestrians on the sidewalks, parked cars at the curb, and five districts that look and feel different.
+- **Cars to steal and drive** — walk up to a car, press E, and drive off with a chase camera and arcade handling. Traffic keeps flowing around you.
+- **A wanted level (1–5 stars) and police who respond** — stealing, hitting pedestrians and shooting raise the heat. Patrol cars chase and ram, officers on foot shoot and try to bust you. Lay low and the stars cool off one by one.
+- **Missions and a story** — five jobs with a beacon, an objective line and a payout: steal a car and reach the boardwalk pickup, deliver a gold coupe to the chop shop, lose a three-star chase, run five cash drops, and a final delivery to the docks under pursuit.
+- **Combat** — fists and a pistol with a magazine and reload; police shoot back; health regrows after a quiet spell.
+- **A HUD with a minimap** — money, wanted stars, health, ammo, speed, the clock, the objective and a live top-down map with the player arrow, the mission marker, police dots and traffic.
+- **Menus and saving** — a title screen with the story and controls, pause, busted and wasted screens, and progress (money and jobs done) saved in localStorage.
+- **Feel and polish** — golden-hour lighting with shadows, muzzle flash, and every sound synthesized live with WebAudio (engine, sirens, shots, pickups). No audio files, no images, no network requests at all.
 
 ## Run it
 
@@ -12,7 +23,13 @@ Neon Shores — an open-world crime game in the spirit of GTA 6, played in the b
 node serve.ts
 ```
 
-Then open http://localhost:8080.
+Then open http://localhost:8080 in a desktop browser. Keyboard and mouse: WASD to move/drive, mouse drag to look, Shift to run, E to steal/exit a car, F to punch, click to shoot, R to reload, Esc to pause, M to mute.
+
+## How it is built
+
+Plain static files under `game/`, no build step. Three.js (r160) is vendored as `game/vendor/three.module.min.js` and loaded through one import map. The game's own source is split into one file per job under `game/src/`: `city.js` (city generation and the road graph), `player.js` (on-foot controls and combat), `vehicles.js` (car physics and traffic AI), `pedestrians.js`, `police.js` (wanted level and pursuit), `missions.js` (the five-job story), `hud.js` (HUD and minimap), `audio.js` (synthesized sounds), `shots.js` (the four deterministic screenshot scenes), `config.js` and `random.js` (seeded RNG). `main.ts` hands the game in; `screenshots/` holds four renders of the game itself.
+
+Everything in this game — the city, the characters, the cars, the story and the sounds — is original, made for this bounty. Nothing is taken from any commercial game.
 
 ---
 
