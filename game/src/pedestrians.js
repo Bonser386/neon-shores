@@ -15,8 +15,11 @@
 import * as THREE from '../vendor/three.module.min.js';
 import { CONFIG, roadCoord } from './config.js';
 
-const SHIRTS = [0xc23b2e, 0x2e6fc2, 0xe8b73a, 0x7a4a9e, 0x2fae5f, 0xd46a2a, 0xe8e8e8, 0x8a6b4a];
+const SHIRTS = [0xc23b2e, 0x2e6fc2, 0xe8b73a, 0x7a4a9e, 0x2fae5f, 0xd46a2a, 0xe8e8e8, 0x8a6b4a,
+  0xff2a7a, 0x22d3ee, 0x8ae234, 0xff7a2a, 0x9a6bff, 0x2ab8a0];
 const SKINS = [0xd9a066, 0x8a5a3a, 0xe8b88a, 0x6b4426];
+const PANTS = [0x2a2a30, 0x3a2f28, 0x2f3a4a, 0x4a3a2a, 0x333a2e, 0x3a2f3a];
+const CAPS = [0xc23b2e, 0x2e6fc2, 0xe8b73a, 0x222226, 0x2fae5f, 0xff2a7a];
 
 // A random point on a sidewalk: pick a road, a spot along it, either side.
 function sidewalkPoint(city, rng) {
@@ -43,7 +46,7 @@ export class Ped {
     this.group = new THREE.Group();
     const shirt = new THREE.MeshLambertMaterial({ color: rng.pick(SHIRTS) });
     const skin = new THREE.MeshLambertMaterial({ color: rng.pick(SKINS) });
-    const pants = new THREE.MeshLambertMaterial({ color: 0x2a2a30 });
+    const pants = new THREE.MeshLambertMaterial({ color: rng.pick(PANTS) });
     this.body = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.95, 0.36), shirt);
     this.body.position.y = 0.95;
     this.body.castShadow = true;
@@ -55,6 +58,24 @@ export class Ped {
     const legR = legL.clone();
     legR.position.x = 0.16;
     this.group.add(this.body, head, legL, legR);
+    // half of them wear a cap, a quarter carry a backpack — the crowd
+    // stops looking like clones from the chase camera
+    if (rng.chance(0.5)) {
+      const cap = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.29, 0.3, 0.1, 10),
+        new THREE.MeshLambertMaterial({ color: rng.pick(CAPS) }),
+      );
+      cap.position.y = 1.86;
+      this.group.add(cap);
+    }
+    if (rng.chance(0.25)) {
+      const pack = new THREE.Mesh(
+        new THREE.BoxGeometry(0.4, 0.5, 0.18),
+        new THREE.MeshLambertMaterial({ color: rng.pick(CAPS) }),
+      );
+      pack.position.set(0, 1.05, -0.27);
+      this.group.add(pack);
+    }
     const p = sidewalkPoint(city, rng);
     this.group.position.set(p.x, 0, p.z);
     this.group.rotation.y = this.heading;

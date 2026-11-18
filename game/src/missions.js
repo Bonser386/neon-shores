@@ -1,4 +1,4 @@
-// Neon Shores — the five-job story.
+// Neon Shores — the seven-job story.
 // Missions run in order; each has a payout and a visible beacon marking the
 // current target. The HUD reads getObjective() for the name, the instruction
 // line and the distance to the target.
@@ -17,6 +17,7 @@
 
 import * as THREE from '../vendor/three.module.min.js';
 import { CONFIG } from './config.js';
+import { makeGlowSprite } from './effects.js';
 
 const DATA = CONFIG.missions;
 
@@ -66,6 +67,31 @@ export class Missions {
       scene.add(m);
       this.dropMeshes.push(m);
     }
+
+    // courier package (mission 6, stage 0): a glowing orange crate at the
+    // downtown pickup; the safehouse (mission 5, stage 1) gets a cyan marker
+    this.packageMesh = new THREE.Mesh(
+      new THREE.BoxGeometry(1.4, 1.0, 1.4),
+      new THREE.MeshBasicMaterial({ color: 0xff7a2a }),
+    );
+    this.packageMesh.position.set(city.spawnPoints.courierPickup.x, 0.7, city.spawnPoints.courierPickup.z);
+    this.packageMesh.visible = false;
+    scene.add(this.packageMesh);
+    const packageGlow = makeGlowSprite(0xff7a2a, 7, 0.45);
+    packageGlow.position.set(city.spawnPoints.courierPickup.x, 1.2, city.spawnPoints.courierPickup.z);
+    this.packageGlow = packageGlow;
+    scene.add(packageGlow);
+    this.safehouseMesh = new THREE.Mesh(
+      new THREE.BoxGeometry(2.0, 2.0, 2.0),
+      new THREE.MeshBasicMaterial({ color: 0x22d3ee }),
+    );
+    this.safehouseMesh.position.set(city.spawnPoints.safehouse.x, 1.2, city.spawnPoints.safehouse.z);
+    this.safehouseMesh.visible = false;
+    scene.add(this.safehouseMesh);
+    const safehouseGlow = makeGlowSprite(0x22d3ee, 9, 0.45);
+    safehouseGlow.position.set(city.spawnPoints.safehouse.x, 2.0, city.spawnPoints.safehouse.z);
+    this.safehouseGlow = safehouseGlow;
+    scene.add(safehouseGlow);
   }
 
   current() {
@@ -77,11 +103,7 @@ export class Missions {
     this.stage = 0;
     this.allDone = this.index >= DATA.length;
     this.collected.clear();
-    for (const m of this.dropMeshes) m.visible = false;
-    if (this.index === 3) {
-      for (const m of this.dropMeshes) m.visible = true;
-    }
-    if (this.index === 4) {
+    if (this.index === 6) {
       // the final job starts under pursuit
       this.player.wanted = Math.max(this.player.wanted, 2);
       this.stage = 1;
@@ -98,15 +120,11 @@ export class Missions {
     this.index += 1;
     this.stage = 0;
     this.allDone = this.index >= DATA.length;
-    for (const d of this.dropMeshes) d.visible = false;
     if (this.onComplete) this.onComplete(m);
     if (!this.allDone) {
       const next = this.current();
       if (next && this.onMissionStart) this.onMissionStart(next);
-      if (this.index === 3) {
-        for (const d of this.dropMeshes) d.visible = true;
-      }
-      if (this.index === 4) {
+      if (this.index === 6) {
         this.player.wanted = Math.max(this.player.wanted, 2);
         this.stage = 1;
       }
@@ -140,6 +158,10 @@ export class Missions {
         });
         return best;
       }
+      case 'getaway':
+        return this.stage === 1 ? sp.safehouse : null;
+      case 'courier':
+        return this.stage === 0 ? sp.courierPickup : sp.courierDrop;
       case 'dock-run':
         return sp.docks;
       default:
@@ -173,6 +195,14 @@ export class Missions {
           text: `Collect the cash drops (${this.collected.size}/5)`,
           dist, target,
         };
+      case 'getaway':
+        return this.stage === 0
+          ? { name: m.name, text: 'Raise your wanted level to 4 stars', dist: null, target: null }
+          : { name: m.name, text: 'Reach the safehouse on the beach — lose the tail', dist, target };
+      case 'courier':
+        return this.stage === 0
+          ? { name: m.name, text: 'Pick up the package downtown', dist, target }
+          : { name: m.name, text: 'Deliver the package to the port warehouse — in a car', dist, target };
       case 'dock-run':
         return { name: m.name, text: 'Final delivery at the docks — under pursuit', dist, target };
       default:
@@ -184,6 +214,7 @@ export class Missions {
     this._time = (this._time || 0) + dt;
     if (this.allDone) {
       this.beacon.visible = false;
+      this._setMarkers(false, false, false);
       return;
     }
     const m = this.current();
@@ -219,6 +250,24 @@ export class Missions {
         if (this.collected.size >= sp.cashDrops.length) this.complete();
         break;
       }
+      case 'getaway': {
+        // raise the heat to 4 stars, then run for the beach safehouse
+        if (this.stage === 0 && p.wanted >= 4) {
+          this.stage = 1;
+          p.wanted = Math.max(p.wanted, 3); // keep the chase hot
+        }
+        if (this.stage === 1 && this.distTo(sp.safehouse) < 10) this.complete();
+        break;
+      }
+      case 'courier': {
+        if (this.stage === 0 && this.distTo(sp.courierPickup) < 6) {
+          this.stage = 1;
+          this.audio?.pickup();
+        }
+        // the delivery only counts in a car — no dropping it off on foot
+        if (this.stage === 1 && !p.onFoot && this.distTo(sp.courierDrop) < 10) this.complete();
+        break;
+      }
       case 'dock-run': {
         if (this.distTo(sp.docks) < 10) this.complete();
         break;
@@ -226,6 +275,14 @@ export class Missions {
       default:
         break;
     }
+
+    // marker visibility is owned here (not by setMission/complete), so a
+    // loaded save shows the right markers on the first frame
+    this._setMarkers(
+      this.index === 3,
+      this.index === 5 && this.stage === 0,
+      this.index === 4 && this.stage === 1,
+    );
 
     // beacon follows the active target, diamond bobs
     const target = this.getTarget();
@@ -237,6 +294,17 @@ export class Missions {
     } else {
       this.beacon.visible = false;
     }
+  }
+
+  // drops / package / safehouse markers: one place decides all three
+  _setMarkers(showDrops, showPackage, showSafehouse) {
+    this.dropMeshes.forEach((mesh, i) => {
+      mesh.visible = showDrops && !this.collected.has(i);
+    });
+    this.packageMesh.visible = showPackage;
+    this.packageGlow.visible = showPackage;
+    this.safehouseMesh.visible = showSafehouse;
+    this.safehouseGlow.visible = showSafehouse;
   }
 
   get time() {
@@ -258,8 +326,6 @@ export class Missions {
       this.allDone = this.index >= DATA.length;
     }
     if (Array.isArray(s.collected)) this.collected = new Set(s.collected);
-    if (this.index === 3) {
-      this.dropMeshes.forEach((mesh, i) => { mesh.visible = !this.collected.has(i); });
-    }
+    // marker visibility is set by update() on the next frame
   }
 }

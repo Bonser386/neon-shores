@@ -18,6 +18,7 @@ import { Missions } from './missions.js';
 import { HUD } from './hud.js';
 import { AudioSys } from './audio.js';
 import { stageShot } from './shots.js';
+import { FX } from './effects.js';
 
 const STEP = 1 / 60;
 const params = new URLSearchParams(location.search);
@@ -33,7 +34,7 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.1;
+renderer.toneMappingExposure = 1.25;
 document.getElementById('game').appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
@@ -42,10 +43,11 @@ scene.fog = new THREE.Fog(CONFIG.colors.fog, 80, 700);
 
 const camera = new THREE.PerspectiveCamera(68, innerWidth / innerHeight, 0.1, 1200);
 
-const hemi = new THREE.HemisphereLight(0xffd9a0, 0x3a2f28, 0.9);
+// dusk: a low orange sun for long shadows, a cool blue fill from the sky
+const hemi = new THREE.HemisphereLight(0x5a6ab0, 0x2a2026, 0.72);
 scene.add(hemi);
-const sun = new THREE.DirectionalLight(CONFIG.colors.sun, 1.6);
-sun.position.set(180, 240, 120);
+const sun = new THREE.DirectionalLight(CONFIG.colors.sun, 1.1);
+sun.position.set(180, 120, 120);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
 sun.shadow.camera.left = -320;
@@ -54,6 +56,8 @@ sun.shadow.camera.top = 320;
 sun.shadow.camera.bottom = -320;
 sun.shadow.camera.far = 700;
 scene.add(sun);
+
+FX.init(scene);
 
 // ---- world ----------------------------------------------------------------
 const rng = makeRng(SEED);
@@ -65,6 +69,32 @@ const audio = new AudioSys();
 const police = new Police(scene, city, rng, player, vehicles, audio);
 const missions = new Missions(scene, city, player, vehicles, police, audio);
 const hud = new HUD(city);
+
+// headlights that actually light the road: a spotlight that rides on the
+// player's car and goes dark when Rico is on foot
+const headlight = new THREE.SpotLight(0xffe9b0, 0, 50, 0.55, 0.6, 1.6);
+const headlightTarget = new THREE.Object3D();
+scene.add(headlight, headlightTarget);
+headlight.target = headlightTarget;
+
+function updateHeadlight() {
+  if (player.car) {
+    const c = player.car;
+    const fx = Math.sin(c.heading);
+    const fz = Math.cos(c.heading);
+    headlight.position.set(
+      c.group.position.x + fx * 2.0, 1.1,
+      c.group.position.z + fz * 2.0,
+    );
+    headlightTarget.position.set(
+      c.group.position.x + fx * 28, 0.3,
+      c.group.position.z + fz * 28,
+    );
+    headlight.intensity = 150;
+  } else {
+    headlight.intensity = 0;
+  }
+}
 
 // ---- state -----------------------------------------------------------------
 let mode = 'start'; // start | playing | paused | mission | busted | wasted
@@ -256,6 +286,7 @@ function tick(dt, input) {
   peds.update(dt);
   police.update(dt);
   missions.update(dt);
+  FX.update(dt);
 
   // health regrows after a quiet spell (no damage, no heat, 6 s)
   if (player.health < prevHealth) lastDamageAt = elapsed;
@@ -289,6 +320,10 @@ function updateCamera(dt) {
   camPos.y += ((height) - camPos.y) * Math.min(1, 8 * dt);
   camPos.z += (bz - camPos.z) * Math.min(1, 8 * dt);
   camera.position.copy(camPos);
+  // screen shake: impacts and gunfire kick the frame
+  const so = FX.shakeOffset();
+  camera.position.x += so.x;
+  camera.position.y += so.y;
   camera.lookAt(
     target.x + Math.sin(camYaw) * 7,
     target.y + 1.3,
@@ -346,6 +381,7 @@ function frame(now) {
   }
 
   updateCamera(dt);
+  updateHeadlight();
   if (mode === 'playing' || mode === 'paused' || mode === 'mission') {
     hud.update(dt, { player, missions, police, clockMin });
   }

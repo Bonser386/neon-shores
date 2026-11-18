@@ -178,7 +178,7 @@ export function stageShot(name, G, seed) {
     dressRoad(G, player.pos.x, player.pos.z, rng);
     clearRoadAhead(G, player.heading);
   } else if (name === 'chase') {
-    // Wanted 3: Rico driving south, a patrol car closing in the oncoming lane.
+    // Wanted 4: Rico driving south in the Vortex GT, patrol cars closing in.
     missions.setMission(0);
     const car = stealNearestParked(G);
     driveForward(G, 6);
@@ -187,11 +187,13 @@ export function stageShot(name, G, seed) {
     // lands on top of the patrol car
     dressRoad(G, player.pos.x, player.pos.z, rng);
     const roadX = 0;
-    const ahead = { x: roadX + LANE, z: player.pos.z + 32 };
-    police.forceChase(3, ahead);
+    // far enough ahead that the patrol car closes in but does not ram the
+    // player before the frame is taken — the chase must read, not collide
+    const ahead = { x: roadX + LANE, z: player.pos.z + 42 };
+    police.forceChase(4, ahead);
     // an officer on the sidewalk ahead
     police.spawnOfficerAt(roadX + SIDE + 1, player.pos.z + 25);
-    const n = Math.round(0.4 / STEP);
+    const n = Math.round(0.25 / STEP);
     for (let i = 0; i < n; i++) G.tick(STEP, { f: true, camHeading: 0 });
     clearRoadAhead(G, player.heading);
   } else if (name === 'mission') {

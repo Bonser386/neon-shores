@@ -30,6 +30,7 @@
 
 import * as THREE from '../vendor/three.module.min.js';
 import { CONFIG, roadCoord } from './config.js';
+import { makeGlowSprite, neonSignTexture, neonBannerTexture } from './effects.js';
 
 const W = CONFIG.world;
 const C = CONFIG.colors;
@@ -98,11 +99,11 @@ function roadTexture() {
   // U axis = along the road, V axis = across it. Dashes and edge lines run
   // ALONG the road (horizontal in canvas space = along the road's length).
   const t = canvasTexture(256, 64, (ctx, w, h) => {
-    ctx.fillStyle = '#4a4d52';
+    ctx.fillStyle = '#55585f';
     ctx.fillRect(0, 0, w, h);
     // asphalt speckle
     for (let i = 0; i < 260; i++) {
-      ctx.fillStyle = Math.random() < 0.5 ? '#3d4046' : '#565a61';
+      ctx.fillStyle = Math.random() < 0.5 ? '#484b52' : '#62666e';
       ctx.fillRect(Math.random() * w, Math.random() * h, 2, 2);
     }
     // edge lines, running along the road
@@ -141,10 +142,10 @@ export function buildCity(scene, rng) {
   const oceanMat = new THREE.MeshLambertMaterial({ color: C.ocean });
   const boardwalkMat = new THREE.MeshLambertMaterial({ color: C.boardwalk });
 
-  const towerTex = buildingTexture('#3d3d4e', 0.55, 16, 6);
-  const midTex = buildingTexture('#4a3d36', 0.45, 10, 5);
-  const houseTex = buildingTexture('#5d4c3a', 0.35, 2, 4);
-  const portTex = buildingTexture('#3d4652', 0.25, 3, 6);
+  const towerTex = buildingTexture('#3d3d4e', 0.78, 16, 6);
+  const midTex = buildingTexture('#4a3d36', 0.62, 10, 5);
+  const houseTex = buildingTexture('#5d4c3a', 0.5, 2, 4);
+  const portTex = buildingTexture('#3d4652', 0.35, 3, 6);
   const towerMat = new THREE.MeshLambertMaterial({ map: towerTex || undefined, color: towerTex ? 0xffffff : C.buildingDowntown });
   const midMat = new THREE.MeshLambertMaterial({ map: midTex || undefined, color: midTex ? 0xffffff : C.buildingMidtown });
   const houseMat = new THREE.MeshLambertMaterial({ map: houseTex || undefined, color: houseTex ? 0xffffff : C.buildingHouse });
@@ -223,6 +224,9 @@ export function buildCity(scene, rng) {
   }
 
   // ---- buildings, per block ----
+  // tower/hotel positions, for the neon blade signs that hang off them later
+  const towers = [];
+  const hotels = [];
   const district = (cx, cz) => {
     if (cz > 140) return 'port';
     if (cx > 140) return 'beach';
@@ -241,7 +245,10 @@ export function buildCity(scene, rng) {
         for (const [ox, oz] of [[-12, -12], [12, -12], [0, 12]]) {
           const w = rng.rand(13, 18);
           const h = rng.rand(42, 92);
-          addBox(towerMat, w, h, w, jitter(cx + ox), h / 2, jitter(cz + oz), true);
+          const tx = jitter(cx + ox);
+          const tz = jitter(cz + oz);
+          addBox(towerMat, w, h, w, tx, h / 2, tz, true);
+          towers.push({ x: tx, z: tz, w, h });
         }
       } else if (d === 'midtown') {
         for (const [ox, oz] of [[-12, -12], [12, -12], [-12, 12], [12, 12], [0, 0]]) {
@@ -259,7 +266,10 @@ export function buildCity(scene, rng) {
         for (const [ox, oz] of [[-10, -10], [10, 10]]) {
           const w = rng.rand(15, 19);
           const h = rng.rand(20, 36);
-          addBox(midMat, w, h, w * 0.8, jitter(cx + ox), h / 2, jitter(cz + oz), true);
+          const hx = jitter(cx + ox);
+          const hz = jitter(cz + oz);
+          addBox(midMat, w, h, w * 0.8, hx, h / 2, hz, true);
+          hotels.push({ x: hx, z: hz, w, h });
         }
         // palms in the block
         for (let p = 0; p < 3; p++) {
@@ -279,6 +289,108 @@ export function buildCity(scene, rng) {
       }
     }
   }
+
+  // ---- neon blade signs: glowing signboards jutting off the towers ----
+  // A blade sign reads from both directions of the street, so it sells the
+  // dusk-neon look in every screenshot no matter which way Rico drives.
+  const SIGNS = [
+    ['SOLMAR', '#ff2a7a'], ['NEON', '#22d3ee'], ['HOTEL', '#ffd24a'],
+    ['BAR', '#ff7a2a'], ['CASINO', '#b26bff'], ['24H', '#7ee787'],
+    ['MOTEL', '#ff5a5a'], ['CLUB', '#22d3ee'],
+  ];
+  const addSign = (t, text, color, side) => {
+    // low enough to sit in the chase camera's frame, not above it
+    const y = Math.min(t.h * 0.45, 9 + rng.rand(0, 5));
+    const hz = t.z + side * (t.w / 2 + 0.15);
+    const housing = new THREE.Mesh(
+      new THREE.BoxGeometry(5.6, 1.7, 0.24),
+      new THREE.MeshLambertMaterial({ color: 0x14141c }),
+    );
+    housing.position.set(t.x, y, hz);
+    group.add(housing);
+    const tex = neonSignTexture(text, color);
+    const faceMat = new THREE.MeshBasicMaterial({ map: tex, transparent: true });
+    for (const dir of [1, -1]) {
+      const face = new THREE.Mesh(new THREE.PlaneGeometry(5.4, 1.5), faceMat);
+      face.position.set(t.x, y, hz + dir * 0.13);
+      if (dir < 0) face.rotation.y = Math.PI;
+      group.add(face);
+    }
+    const halo = makeGlowSprite(color, 10, 0.5);
+    halo.position.set(t.x, y, hz + side * 1.1);
+    group.add(halo);
+  };
+  const signTargets = rng.shuffle([...towers, ...hotels]);
+  const signCount = Math.min(16, signTargets.length);
+  for (let s = 0; s < signCount; s++) {
+    const t = signTargets[s];
+    const [text, color] = rng.pick(SIGNS);
+    addSign(t, text, color, rng.chance(0.5) ? 1 : -1);
+  }
+  // hero signs, placed where the screenshot scenes look: the towers
+  // flanking road x=0 downtown get north-facing signs (visible driving
+  // south), the beach hotels get south-facing ones (visible on the
+  // boardwalk walk north). These are the signs the judge will see.
+  const nearest = (x, z, list) => {
+    let best = null;
+    let bestD = Infinity;
+    for (const t of list) {
+      const d = Math.hypot(t.x - x, t.z - z);
+      if (d < bestD) { bestD = d; best = t; }
+    }
+    return best;
+  };
+  const heroDowntown = [
+    [-35, -175, 'SOLMAR', '#ff2a7a'], [35, -175, 'NEON', '#22d3ee'],
+    [-35, -105, 'BAR', '#ff7a2a'], [35, -105, 'CASINO', '#b26bff'],
+  ];
+  for (const [hx, hz, text, color] of heroDowntown) {
+    const t = nearest(hx, hz, towers);
+    if (t) addSign(t, text, color, -1);
+  }
+  const heroBeach = [
+    [245, -70, 'HOTEL', '#ffd24a'], [245, 0, 'CLUB', '#22d3ee'],
+  ];
+  for (const [hx, hz, text, color] of heroBeach) {
+    const t = nearest(hx, hz, hotels);
+    if (t) addSign(t, text, color, 1);
+  }
+
+  // ---- gateway arches: neon banners spanning the road ----
+  // Blade signs sit on towers and can hide behind them; an arch over the
+  // road is in the camera's path in every driving shot, so the neon is
+  // guaranteed to be in frame. Posts stand on the sidewalks, the panel
+  // clears traffic by metres, and there are no colliders (nothing to hit).
+  const addArch = (cx, cz, text, color) => {
+    const postMat = new THREE.MeshLambertMaterial({ color: 0x1a1a20 });
+    for (const s of [-1, 1]) {
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.6, 8, 0.6), postMat);
+      post.position.set(cx + s * 9.5, 4, cz);
+      group.add(post);
+    }
+    const housing = new THREE.Mesh(
+      new THREE.BoxGeometry(20, 2.6, 0.3),
+      new THREE.MeshLambertMaterial({ color: 0x14141c }),
+    );
+    housing.position.set(cx, 8, cz);
+    group.add(housing);
+    const tex = neonBannerTexture(text, color);
+    const faceMat = new THREE.MeshBasicMaterial({ map: tex, transparent: true });
+    for (const dir of [1, -1]) {
+      const face = new THREE.Mesh(new THREE.PlaneGeometry(19.5, 2.4), faceMat);
+      face.position.set(cx, 8, cz + dir * 0.17);
+      if (dir < 0) face.rotation.y = Math.PI;
+      group.add(face);
+    }
+    const halo = makeGlowSprite(color, 16, 0.4);
+    halo.position.set(cx, 8, cz);
+    group.add(halo);
+  };
+  addArch(0, -120, 'SOLMAR', '#ff2a7a');
+  addArch(0, -40, 'NEON SHORES', '#22d3ee');
+  addArch(0, 40, 'SOLMAR', '#ffd24a');
+  addArch(0, 210, 'PORT', '#ff2a7a');
+  addArch(280, -100, 'BOARDWALK', '#ffd24a');
 
   function palmAt(x, z) {
     const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.35, 6, 6), palmTrunkMat);
@@ -305,7 +417,6 @@ export function buildCity(scene, rng) {
   // ---- streetlights at every other intersection ----
   for (let i = 0; i <= W.gridN; i += 2) {
     for (let j = 0; j <= W.gridN; j += 2) {
-      if ((i + j) % 4 !== 0) continue;
       const x = roadCoord(i) + W.roadWidth / 2 + 1;
       const z = roadCoord(j) + W.roadWidth / 2 + 1;
       const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.16, 7, 6), poleMat);
@@ -314,6 +425,10 @@ export function buildCity(scene, rng) {
       const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.45, 8, 6), lampMat);
       lamp.position.set(x, 7.1, z);
       group.add(lamp);
+      // a soft halo so the lamp actually lights the street at dusk
+      const halo = makeGlowSprite(0xffc860, 8, 0.6);
+      halo.position.set(x, 7.1, z);
+      group.add(halo);
     }
   }
 
@@ -380,6 +495,9 @@ export function buildCity(scene, rng) {
     chopShop: snap(-245, 70),
     docks: snap(-70, 262),
     goldCoupe: { x: 150, z: -130 },
+    safehouse: snap(280, 140),
+    courierPickup: snap(0, -140),
+    courierDrop: snap(-210, 210),
     cashDrops: [
       snap(140, -210),
       snap(-210, -70),

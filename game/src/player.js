@@ -23,6 +23,7 @@
 
 import * as THREE from '../vendor/three.module.min.js';
 import { CONFIG } from './config.js';
+import { FX } from './effects.js';
 
 const P = CONFIG.player;
 
@@ -42,6 +43,7 @@ export class Player {
     this.reloadTimer = 0;
     this.shootTimer = 0;
     this.punchTimer = 0;
+    this.smokeTimer = 0;
     this.vx = 0;
     this.vz = 0;
 
@@ -49,7 +51,9 @@ export class Player {
     this.group = new THREE.Group();
     this.group.name = 'rico';
 
-    const jacket = new THREE.MeshLambertMaterial({ color: 0x1f3a5f });
+    // Rico's jacket is a bright red so he reads against the dark street;
+    // a small emissive keeps it red on the shadowed side too
+    const jacket = new THREE.MeshLambertMaterial({ color: 0xa83232, emissive: 0x5a1616 });
     const skin = new THREE.MeshLambertMaterial({ color: 0xd9a066 });
     const dark = new THREE.MeshLambertMaterial({ color: 0x222226 });
     this.body = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.95, 0.36), jacket);
@@ -111,6 +115,22 @@ export class Player {
       this.group.visible = false;
       this.heading = this.car.heading;
       this.speed = this.car.speed;
+      // tyre smoke: a hard launch, or steering hard at speed
+      this.smokeTimer -= dt;
+      const drifting = (input.l || input.r) && Math.abs(this.speed) > 14;
+      const burnout = input.f && this.speed >= 0 && this.speed < 8;
+      if ((drifting || burnout) && this.smokeTimer <= 0) {
+        this.smokeTimer = 0.09;
+        const fx = Math.sin(this.heading);
+        const fz = Math.cos(this.heading);
+        const rx = Math.cos(this.heading);
+        const rz = -Math.sin(this.heading);
+        const px = this.car.group.position.x;
+        const pz = this.car.group.position.z;
+        for (const s of [-0.95, 0.95]) {
+          FX.puff(px - fx * 1.5 + rx * s, 0.3, pz - fz * 1.5 + rz * s);
+        }
+      }
       return;
     }
     this.group.visible = true;
@@ -210,6 +230,9 @@ export class Player {
     this.ammo -= 1;
     this.shootTimer = P.shootCooldown;
     this.flashTimer = 0.06;
+    // muzzle sparks + a small kick
+    FX.muzzle(this.pos.x, 1.0, this.pos.z, this.heading);
+    FX.shake(0.05);
     const ped = world.peds.nearestPed(this.pos, P.shootRange, this.heading, 0.92);
     if (ped) {
       const killed = ped.hit(P.shootDamage);

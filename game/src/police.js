@@ -21,6 +21,7 @@
 import * as THREE from '../vendor/three.module.min.js';
 import { CONFIG } from './config.js';
 import { Car } from './vehicles.js';
+import { FX } from './effects.js';
 
 const WANTED = CONFIG.wanted;
 const WORLD = CONFIG.world;
@@ -206,19 +207,20 @@ export class Police {
     this.sirenOn = stars >= 1 && (this.cars.length > 0 || this.officers.length > 0);
 
     // ---- spawn / despawn ----
+    // hotter wanted levels: faster reinforcements, more of them
     const wantCars = Math.min(5, stars);
     if (this.cars.length < wantCars) {
       this.spawnTimer -= dt;
       if (this.spawnTimer <= 0) {
         this.spawnPatrolCar();
-        this.spawnTimer = 1.5;
+        this.spawnTimer = Math.max(0.7, 1.5 - 0.15 * stars);
       }
     }
     if (stars === 0) {
       for (const car of [...this.cars]) this.removeCar(car);
       for (const off of [...this.officers]) this.removeOfficer(off);
     }
-    const wantOfficers = stars >= 2 ? Math.min(2, stars - 1) : 0;
+    const wantOfficers = stars >= 2 ? Math.min(3, stars - 1) : 0;
     if (this.officers.length < wantOfficers) {
       const p = player.pos;
       const ang = this.rng.rand(0, Math.PI * 2);
@@ -241,16 +243,19 @@ export class Police {
       const dx = px - gp.x;
       const dz = pz - gp.z;
       const dist = Math.hypot(dx, dz) || 1;
-      // steer toward the player, with crude building avoidance
+      // steer toward the player, with crude building avoidance; hotter
+      // wanted levels turn sharper and drive faster (at 5 stars a patrol
+      // car outruns a normal stolen car — steal the Vortex GT to escape)
+      const turnRate = 2.2 + 0.25 * stars;
       const want = angleTo(gp.x, gp.z, px, pz);
-      car.heading = turnToward(car.heading, want, 2.6, dt);
+      car.heading = turnToward(car.heading, want, turnRate, dt);
       const nx = gp.x + Math.sin(car.heading) * 1;
       const nz = gp.z + Math.cos(car.heading) * 1;
       if (this.city.collide(nx, nz, 1.4)) {
-        car.heading = turnToward(car.heading, car.heading + 0.9, 2.6, dt);
+        car.heading = turnToward(car.heading, car.heading + 0.9, turnRate, dt);
       }
       // slow for a traffic car directly ahead
-      let targetSpeed = 36;
+      let targetSpeed = 32 + 2.5 * stars;
       for (const o of this.vehicles.cars) {
         if (o.driver) continue;
         const ox = o.group.position.x - gp.x;
@@ -273,13 +278,21 @@ export class Police {
       const phase = Math.floor(this.time * 6) % 2 === 0;
       if (car._lightR) car._lightR.material.color.setHex(phase ? 0xff2a22 : 0x5a0f0c);
       if (car._lightB) car._lightB.material.color.setHex(phase ? 0x0e2a66 : 0x2a6bff);
-      // ramming the player
+      // ramming the player: sparks + a shake on first contact, harder shove
+      // at higher wanted levels
       if (dist < 4.2) {
         contact = true;
+        if (!car._ramming) {
+          car._ramming = true;
+          FX.burst(gp.x, 0.7, gp.z, 12);
+          FX.shake(0.22);
+        }
         if (player.car) {
-          player.car.speed *= Math.max(0, 1 - 2.2 * dt);
+          player.car.speed *= Math.max(0, 1 - 2.2 * (1 + 0.12 * stars) * dt);
           player.car.heading += 0.35 * dt;
         }
+      } else if (dist > 5) {
+        car._ramming = false;
       }
     }
 
@@ -293,7 +306,8 @@ export class Police {
       off.heading = turnToward(off.heading, want, 5, dt);
       off.group.rotation.y = off.heading;
       if (dist > 3) {
-        const step = Math.min(dist - 2.5, 6.5 * dt);
+        // hotter wanted levels: officers close in faster
+        const step = Math.min(dist - 2.5, (6 + 0.4 * stars) * dt);
         gp.x += (dx / dist) * step;
         gp.z += (dz / dist) * step;
       }
@@ -301,7 +315,7 @@ export class Police {
       if (dist < 28 && off.shootTimer <= 0) {
         off.shootTimer = 0.9;
         this.audio?.gunshot();
-        if (this.rng.chance(0.35)) player.takeDamage(6);
+        if (this.rng.chance(Math.min(0.6, 0.3 + 0.05 * stars))) player.takeDamage(6);
       }
       if (dist < 2.4 && player.onFoot && playerSpeed < 3) contact = true;
     }

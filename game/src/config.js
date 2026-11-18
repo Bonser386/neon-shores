@@ -49,10 +49,12 @@ export const CONFIG = {
     trafficSpeed: 9,     // m/s cruise for AI traffic
     trafficSpeedJitter: 2,
     laneOffset: 3.2,     // right-hand lane offset from centreline (m)
+    // the Vortex GT sports car: faster, sharper, lower
+    sports: { maxSpeed: 52, accel: 28, steer: 2.4 }, // ~187 km/h
   },
 
   // ---- population ----
-  traffic: { moving: 16, parked: 7 },   // 24 cars total (16 traffic + 7 parked + gold coupe)
+  traffic: { moving: 16, parked: 7 },   // 25 cars total (16 traffic + 7 parked + gold coupe + sports car)
   peds: { count: 28, walkSpeed: 1.6, fleeSpeed: 7.0 },
 
   // ---- wanted level (police.js reads this) ----
@@ -93,6 +95,18 @@ export const CONFIG = {
       reward: 800,
     },
     {
+      id: 'getaway',
+      name: 'Getaway',
+      blurb: 'Lose a four-star chase and reach the safehouse on the beach.',
+      reward: 1000,
+    },
+    {
+      id: 'courier',
+      name: 'Courier',
+      blurb: 'Pick up the package downtown and deliver it to the port warehouse — in a car.',
+      reward: 900,
+    },
+    {
       id: 'dock-run',
       name: 'Dock Run',
       blurb: 'Final delivery at the docks — under pursuit.',
@@ -100,15 +114,15 @@ export const CONFIG = {
     },
   ],
 
-  // ---- look: golden hour ----
+  // ---- look: dusk, blue hour — neon does the talking ----
   colors: {
-    sky: 0xff9a52,
-    fog: 0xf79c5e,
-    sun: 0xffb36b,
-    ground: 0x35302a,
+    sky: 0x1d2440,
+    fog: 0x232a4a,
+    sun: 0xff8a3d,
+    ground: 0x322c26,
     road: 0x3a3d42,
     sidewalk: 0x8d8578,
-    ocean: 0x14506e,
+    ocean: 0x0e2f4a,
     boardwalk: 0x8a6b4a,
     buildingDowntown: 0x4a4a58,
     buildingMidtown: 0x5a4a42,
@@ -117,9 +131,9 @@ export const CONFIG = {
   },
 
   // ---- in-game clock ----
-  clock: { startHour: 17, startMinute: 45, minutesPerSecond: 0.5 },
+  clock: { startHour: 19, startMinute: 20, minutesPerSecond: 0.5 },
 
-  saveKey: 'neon-shores-save-v1',
+  saveKey: 'neon-shores-save-v2',
 };
 
 // Road centreline coordinate for road index i (0..8).
